@@ -1,0 +1,30 @@
+{
+  "name": "gioneco-mysql-ch",
+  "version": "1.0.0",
+  "description": "将mysql数据同步到clickhouse",
+  "main": "index.js",
+  "bin": {
+    "gioneco-mysql-ch": "dist/cli.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc -p ."
+  },
+  "author": "meiyun",
+  "license": "MIT",
+  "dependencies": {
+    "async": "^3.1.0",
+    "lodash": "^4.17.15",
+    "moment": "^2.24.0",
+    "mysql2": "^1.7.0",
+    "typeorm": "^0.2.20",
+    "yargs": "^14.2.0"
+  },
+  "devDependencies": {
+    "@types/async": "^3.0.3",
+    "@types/node": "^8.10.53",
+    "@types/yargs": "^13.0.3",
+    "ts-node": "3.3.0",
+    "typescript": "3.3.3333"
+  }
+}
