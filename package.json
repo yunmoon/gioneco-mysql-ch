@@ -26,5 +26,9 @@
     "@types/yargs": "^13.0.3",
     "ts-node": "3.3.0",
     "typescript": "3.3.3333"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/yunmoon/gioneco-mysql-ch.git"
   }
 }
