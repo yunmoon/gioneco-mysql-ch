@@ -5,10 +5,10 @@ import * as times from 'async/times';
 import { isNull } from "util";
 import _ = require("lodash");
 import moment = require("moment");
-
-async function syncData(queryRunner: QueryRunner, chclient, chTable, tableName, timeColumn, start, end, condition) {
+let importCount = 0, timeTotal = 0, fiveTotal = 0
+async function syncData(queryRunner: QueryRunner, chclient, chDatabase, chTable, tableName, timeColumn, start, end, condition, limit) {
   console.log(`正在同步表${tableName}的数据`)
-  let limit = 100, page = 0, conditionArray = [], conditionStr;
+  let page = 0, conditionArray = [], conditionStr;
   if (condition) {
     Object.keys(condition).forEach(key => {
       if (isNull(condition[key]) || condition[key] === "null" || condition[key] === "NULL") {
@@ -19,21 +19,23 @@ async function syncData(queryRunner: QueryRunner, chclient, chTable, tableName, 
     })
     conditionStr = conditionArray.join(" and ");
   }
-  let sql = `select * from \`${tableName}\` ${((timeColumn && start && end) || condition) ? 'where' : ''}${timeColumn && start && end ? `\`${timeColumn}\` between ${`'${start}'`} and ${`'${end}'`}` : ""}${condition ? ` and ${conditionStr}` : ""} order by \`${timeColumn}\` asc limit ?,?`;
+  let sql = `select * from \`${tableName}\` ${((timeColumn && start && end) || conditionStr) ? 'where' : ''}${timeColumn && start && end ? `\`${timeColumn}\` between ${`'${start}'`} and ${`'${end}'`}` : ""}${conditionStr ? ` and ${conditionStr}` : ""} order by \`${timeColumn}\` asc limit ?,?`;
   let rows = await queryRunner.query(sql, [page * limit, limit]);
   while (rows.length > 0) {
-    await insertDataToClickhouse(chclient, rows, chTable);
+    await insertDataToClickhouse(chDatabase, chclient, rows, chTable);
     page++;
     rows = await queryRunner.query(sql, [page * limit, limit]);
   }
   console.log(`表${tableName}的数据同步完成`)
 }
-async function insertDataToClickhouse(chclient, data, chTableName) {
+async function insertDataToClickhouse(database, chclient, data, chTableName) {
   return new Promise((resolve, reject) => {
-    const stream = chclient.query(`INSERT INTO \`${chTableName}\``, { format: "JSONEachRow" }, async function (err, result) {
+    const stream = chclient.query(`INSERT INTO \`${chTableName}\``, { format: "JSONEachRow", queryOptions: { database } }, async function (err, result) {
       if (err) {
         reject(err)
       } else {
+        importCount += data.length
+        fiveTotal += data.length
         resolve(result);
       }
     });
@@ -89,6 +91,10 @@ export default class RunCommand implements CommandModule {
       type: "string",
       demand: true,
       describe: "同步到clickhouse的表名"
+    }).option("limit", {
+      type: "number",
+      default: 1000,
+      describe: "分页查询数量"
     })
   }
   async handler(args) {
@@ -124,17 +130,25 @@ export default class RunCommand implements CommandModule {
         ns++
       }
       const groupTableNames = _.chunk(tables, Math.ceil(args.number / args.thread));
+      setInterval(() => {
+        timeTotal++;
+        console.log(`当前导入数据量：${importCount}`);
+        if (timeTotal % 5 === 0) {
+          console.log(`当前TPS: ${fiveTotal / 5}`);
+          fiveTotal = 0;
+        }
+      }, 1000)
       await times(groupTableNames.length, async (time) => {
         const queryRunner = connection.createQueryRunner();
         const tables = groupTableNames[time];
         for (let index = 0; index < tables.length; index++) {
           const tableName = tables[index];
-          await syncData(queryRunner, chclient, args.chTable, tableName, args.timeColumn, args.start, args.end, condition);
+          await syncData(queryRunner, chclient, config.clickhouse.database, args.chTable, tableName, args.timeColumn, args.start, args.end, condition, args.limit);
         }
       });
     } else {
       const queryRunner = connection.createQueryRunner();
-      await syncData(queryRunner, chclient, args.chTable, tableName, args.timeColumn, args.start, args.end, condition);
+      await syncData(queryRunner, chclient, config.clickhouse.database, args.chTable, tableName, args.timeColumn, args.start, args.end, condition, args.limit);
     }
     console.log("执行完毕！");
     process.exit();
