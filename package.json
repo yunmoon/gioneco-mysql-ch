@@ -1,6 +1,6 @@
 {
   "name": "gioneco-mysql-ch",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "将mysql数据同步到clickhouse",
   "main": "index.js",
   "bin": {

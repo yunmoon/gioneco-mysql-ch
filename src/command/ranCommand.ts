@@ -5,7 +5,8 @@ import * as times from 'async/times';
 import { isNull } from "util";
 import _ = require("lodash");
 import moment = require("moment");
-let importCount = 0, timeTotal = 0, fiveTotal = 0
+import cp = require('child_process');
+let child;
 async function syncData(queryRunner: QueryRunner, chclient, chDatabase, chTable, tableName, timeColumn, start, end, condition, limit) {
   console.log(`正在同步表${tableName}的数据`)
   let page = 0, conditionArray = [], conditionStr;
@@ -34,13 +35,11 @@ async function insertDataToClickhouse(database, chclient, data, chTableName) {
       if (err) {
         reject(err)
       } else {
-        importCount += data.length
-        fiveTotal += data.length
+        child.send(data.length);
         resolve(result);
       }
     });
     for (const item of data) {
-      // delete item.faceId;
       Object.keys(item).forEach(key => {
         if (item[key] instanceof Date) {
           item[key] = moment(item[key]).format("YYYY-MM-DD HH:mm:ss");
@@ -95,10 +94,15 @@ export default class RunCommand implements CommandModule {
       type: "number",
       default: 1000,
       describe: "分页查询数量"
+    }).option("time", {
+      type: "number",
+      default: 5,
+      describe: "计时输出tps时间，默认5秒"
     })
   }
   async handler(args) {
     const config = require(`${process.cwd()}/${args.config}`);
+    child = cp.fork(`${__dirname}/../child`, [args.time]);
     if (!config.mysql || !config.clickhouse) {
       throw new Error("config 配置错误");
     }
@@ -130,14 +134,14 @@ export default class RunCommand implements CommandModule {
         ns++
       }
       const groupTableNames = _.chunk(tables, Math.ceil(args.number / args.thread));
-      setInterval(() => {
-        timeTotal++;
-        console.log(`当前导入数据量：${importCount}`);
-        if (timeTotal % 5 === 0) {
-          console.log(`当前TPS: ${fiveTotal / 5}`);
-          fiveTotal = 0;
-        }
-      }, 1000)
+      // setInterval(() => {
+      //   timeTotal++;
+      //   console.log(`当前导入数据量：${importCount}`);
+      //   if (timeTotal % args.time === 0) {
+      //     console.log(`当前TPS: ${fiveTotal / args.time}`);
+      //     fiveTotal = 0;
+      //   }
+      // }, 1000)
       await times(groupTableNames.length, async (time) => {
         const queryRunner = connection.createQueryRunner();
         const tables = groupTableNames[time];
